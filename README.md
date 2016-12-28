@@ -3,7 +3,7 @@ migration-to-0.5.0
 
 This is the migration tool for HackMD to upgrade to version 0.5.0.  
 Use this tool if you were running a old version HackMD server.  
-We'll uncompress all data which was compressed by LZString.
+We'll uncompress note and revision data which were compressed by LZString.
 
 Get started
 ---
