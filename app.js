@@ -45,24 +45,24 @@ function migrateNotes(callback) {
     logger.info('> migrate notes');
     models.Note.findAll().then(function (notes) {
         logger.info('found ' + notes.length + ' notes!');
+        var successCount = 0;
         async.eachOfSeries(notes, function (note, key, _callback) {
             note.update({
                 title: decompress(note.title),
                 content: decompress(note.content),
                 authorship: decompress(note.authorship)
             }).then(function (note) {
+                successCount++;
                 showProgress(key + 1, notes.length, 'notes');
                 return _callback();
             }).catch(function (err) {
-                return _callback(err);
+                logger.error('migrate notes failed on: ' + note.id);
+                logger.error('migrate notes failed: ' + err);
+                return _callback();
             });
         }, function (err) {
-            if (err) {
-                logger.error('migrate notes failed: ' + err);
-                return callback(err);
-            }
             models.Note.count().then(function (count) {
-                logger.info('migrate notes success: ' + count + '/' + notes.length);
+                logger.info('migrate notes success: ' + successCount + '/' + count);
                 return callback();
             }).catch(function (err) {
                 logger.error('count db notes failed: ' + err);
@@ -78,6 +78,7 @@ function migrateRevisions(callback) {
     logger.info('> migrate revisions');
     models.Revision.findAll().then(function (revisions) {
         logger.info('found ' + revisions.length + ' revisions!');
+        var successCount = 0;
         async.eachOfSeries(revisions, function (revision, key, _callback) {
             revision.update({
                 patch: decompress(revision.patch),
@@ -85,18 +86,17 @@ function migrateRevisions(callback) {
                 content: decompress(revision.content),
                 authorship: decompress(revision.authorship)
             }).then(function (revision) {
+                successCount++;
                 showProgress(key + 1, revisions.length, 'revisions');
                 return _callback();
             }).catch(function (err) {
-                return _callback(err);
+                logger.error('migrate revisions failed on: ' + revision.id);
+                logger.error('migrate revisions failed: ' + err);
+                return _callback();
             });
         }, function (err) {
-            if (err) {
-                logger.error('migrate revisions failed: ' + err);
-                return callback(err);
-            }
             models.Revision.count().then(function (count) {
-                logger.info('migrate revisions success: ' + count + '/' + revisions.length);
+                logger.info('migrate revisions success: ' + successCount + '/' + count);
                 return callback();
             }).catch(function (err) {
                 logger.error('count db revisions failed: ' + err);
