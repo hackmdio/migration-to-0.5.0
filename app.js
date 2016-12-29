@@ -35,77 +35,124 @@ function decompress(str) {
             _str = null;
         }
     } catch (err) {
+        logger.error(str);
         logger.error(err);
         _str = str;
     }
     return _str;
 }
 
-function migrateNotes(callback) {
-    logger.info('> migrate notes');
-    models.Note.findAll().then(function (notes) {
-        logger.info('found ' + notes.length + ' notes!');
+var paging = 10000;
+
+function migrateByModel(modelName, process, callback) {
+    var count = 0;
+    models[modelName].count().then(function (_count) {
+        logger.info('found ' + _count + ' ' + modelName.toLowerCase() + '!');
+        if (_count <= 0) return callback();
+        count = _count;
+        var processedCount = 0;
         var successCount = 0;
-        async.eachOfSeries(notes, function (note, key, _callback) {
-            note.update({
-                title: decompress(note.title),
-                content: decompress(note.content),
-                authorship: decompress(note.authorship)
-            }).then(function (note) {
-                successCount++;
-                showProgress(key + 1, notes.length, 'notes');
-                return _callback();
+        function migrateInner(baseIid) {
+            models[modelName].findAll({
+                order: [['iid', 'ASC']],
+                limit: paging,
+                where: {
+                    iid: {
+                        $gte: baseIid + processedCount
+                    }
+                }
+            }).then(function (items) {
+                async.eachOfSeries(items, function (item, key, _callback) {
+                    var currentCount = processedCount + key + 1;
+                    process(item, currentCount, function (err, result) {
+                        if (err) {
+                            logger.error('migrate ' + modelName.toLowerCase() + ' failed on: ' + item.id);
+                            logger.error('migrate ' + modelName.toLowerCase() + ' failed: ' + err);
+                            return _callback();
+                        } else {
+                            successCount++;
+                            showProgress(currentCount, count, modelName.toLowerCase());
+                            return _callback();
+                        }
+                    });
+                }, function (err) {
+                    processedCount += items.length;
+                    if (processedCount >= count) {
+                        logger.info('migrate ' + modelName.toLowerCase() + ' success: ' + successCount + '/' + count);
+                        return callback();
+                    } else {
+                        return migrateInner(baseIid);
+                    }
+                });
             }).catch(function (err) {
-                logger.error('migrate notes failed on: ' + note.id);
-                logger.error('migrate notes failed: ' + err);
-                return _callback();
-            });
-        }, function (err) {
-            models.Note.count().then(function (count) {
-                logger.info('migrate notes success: ' + successCount + '/' + count);
-                return callback();
-            }).catch(function (err) {
-                logger.error('count db notes failed: ' + err);
                 return callback(err);
             });
+        }
+        models[modelName].findOne({
+            order: [['iid', 'ASC']]
+        }).then(function (item) {
+            logger.info(modelName.toLowerCase() + ' base iid is ' + item.iid);
+            return migrateInner(item.iid);
+        }).catch(function (err) {
+            return callback(err);
         });
     }).catch(function (err) {
+        logger.error('count db ' + modelName.toLowerCase() + ' failed: ' + err);
         return callback(err);
     });
 }
 
+function migrateNotesIndex(callback) {
+    logger.info('> migrate notes index');
+    logger.info('add column "iid" to notes!');
+    var queryInterface = models.sequelize.getQueryInterface();
+    queryInterface.addColumn("Notes", "iid", {
+        type: models.Sequelize.INTEGER,
+        autoIncrement: true
+    });
+    return callback();
+}
+
+function migrateNotes(callback) {
+    logger.info('> migrate notes');
+    migrateByModel("Note", function (note, key, _callback) {
+        note.update({
+            title: decompress(note.title),
+            content: decompress(note.content),
+            authorship: decompress(note.authorship)
+        }).then(function (note) {
+            return _callback(null, note);
+        }).catch(function (err) {
+            return _callback(err, null);
+        });
+    }, callback);
+}
+
+function migrateRevisionsIndex(callback) {
+    logger.info('> migrate revisions index');
+    logger.info('add column "iid" to revisions!');
+    var queryInterface = models.sequelize.getQueryInterface();
+    queryInterface.addColumn("Revisions", "iid", {
+        type: models.Sequelize.INTEGER,
+        autoIncrement: true
+    });
+    return callback();
+}
+
 function migrateRevisions(callback) {
     logger.info('> migrate revisions');
-    models.Revision.findAll().then(function (revisions) {
-        logger.info('found ' + revisions.length + ' revisions!');
-        var successCount = 0;
-        async.eachOfSeries(revisions, function (revision, key, _callback) {
-            revision.update({
-                patch: decompress(revision.patch),
-                lastContent: decompress(revision.lastContent),
-                content: decompress(revision.content),
-                authorship: decompress(revision.authorship)
-            }).then(function (revision) {
-                successCount++;
-                showProgress(key + 1, revisions.length, 'revisions');
-                return _callback();
-            }).catch(function (err) {
-                logger.error('migrate revisions failed on: ' + revision.id);
-                logger.error('migrate revisions failed: ' + err);
-                return _callback();
-            });
-        }, function (err) {
-            models.Revision.count().then(function (count) {
-                logger.info('migrate revisions success: ' + successCount + '/' + count);
-                return callback();
-            }).catch(function (err) {
-                logger.error('count db revisions failed: ' + err);
-                return callback(err);
-            });
+    migrateByModel("Revision", function (revision, key, _callback) {
+        revision.update({
+            patch: decompress(revision.patch),
+            lastContent: decompress(revision.lastContent),
+            content: decompress(revision.content),
+            authorship: decompress(revision.authorship)
+        }).then(function (revision) {
+            return _callback(null, revision);
+        }).catch(function (err) {
+            return _callback(err, null);
         });
-    }).catch(function (err) {
-        return callback(err);
-    });
+    }, callback);
 }
 
 // sync new db models
@@ -113,7 +160,9 @@ models.sequelize.sync().then(function () {
     logger.info('connect to db and sync success!');
     logger.info('---start migration---');
     async.series({
+        migrateNotesIndex: migrateNotesIndex,
         migrateNotes: migrateNotes,
+        migrateRevisionsIndex: migrateRevisionsIndex,
         migrateRevisions: migrateRevisions
     }, function(err, results) {
         if (err) {
