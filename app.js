@@ -52,15 +52,11 @@ function migrateByModel(modelName, process, callback) {
         count = _count;
         var processedCount = 0;
         var successCount = 0;
-        function migrateInner(baseIid) {
+        function migrateInner() {
             models[modelName].findAll({
-                order: [['iid', 'ASC']],
+                order: [['createdAt', 'ASC']],
                 limit: paging,
-                where: {
-                    iid: {
-                        $gte: baseIid + processedCount
-                    }
-                }
+                offset: processedCount
             }).then(function (items) {
                 async.eachOfSeries(items, function (item, key, _callback) {
                     var currentCount = processedCount + key + 1;
@@ -81,36 +77,18 @@ function migrateByModel(modelName, process, callback) {
                         logger.info('migrate ' + modelName.toLowerCase() + ' success: ' + successCount + '/' + count);
                         return callback();
                     } else {
-                        return migrateInner(baseIid);
+                        return migrateInner();
                     }
                 });
             }).catch(function (err) {
                 return callback(err);
             });
         }
-        models[modelName].findOne({
-            order: [['iid', 'ASC']]
-        }).then(function (item) {
-            logger.info(modelName.toLowerCase() + ' base iid is ' + item.iid);
-            return migrateInner(item.iid);
-        }).catch(function (err) {
-            return callback(err);
-        });
+        migrateInner();
     }).catch(function (err) {
         logger.error('count db ' + modelName.toLowerCase() + ' failed: ' + err);
         return callback(err);
     });
-}
-
-function migrateNotesIndex(callback) {
-    logger.info('> migrate notes index');
-    logger.info('add column "iid" to notes!');
-    var queryInterface = models.sequelize.getQueryInterface();
-    queryInterface.addColumn("Notes", "iid", {
-        type: models.Sequelize.INTEGER,
-        autoIncrement: true
-    });
-    return callback();
 }
 
 function migrateNotes(callback) {
@@ -126,17 +104,6 @@ function migrateNotes(callback) {
             return _callback(err, null);
         });
     }, callback);
-}
-
-function migrateRevisionsIndex(callback) {
-    logger.info('> migrate revisions index');
-    logger.info('add column "iid" to revisions!');
-    var queryInterface = models.sequelize.getQueryInterface();
-    queryInterface.addColumn("Revisions", "iid", {
-        type: models.Sequelize.INTEGER,
-        autoIncrement: true
-    });
-    return callback();
 }
 
 function migrateRevisions(callback) {
@@ -160,9 +127,7 @@ models.sequelize.sync().then(function () {
     logger.info('connect to db and sync success!');
     logger.info('---start migration---');
     async.series({
-        migrateNotesIndex: migrateNotesIndex,
         migrateNotes: migrateNotes,
-        migrateRevisionsIndex: migrateRevisionsIndex,
         migrateRevisions: migrateRevisions
     }, function(err, results) {
         if (err) {
