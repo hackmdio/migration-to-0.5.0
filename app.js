@@ -28,6 +28,11 @@ function decompress(str) {
         if (str) {
             if (isInKeyStr(str)) {
                 _str = LZString.decompressFromBase64(str);
+                // replace null byte out (PostgreSQL text datatype does not accept them)
+                if (_str) _str = _str.replace(/\u0000/g, '');
+                // if decompress gets empty string and original string is not equal to compressed empty string
+                // it might means the string is already decoded
+                else if (str !== 'Q===') _str = str;
             } else {
                 _str = str;
             }
