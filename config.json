@@ -7,18 +7,18 @@
     },
     "development": {
         "db": {
-            "username": "",
-            "password": "",
+            "username": "hackmd",
+            "password": "hackmdpass",
             "database": "hackmd",
             "host": "localhost",
-            "port": "3306",
-            "dialect": "mysql"
+            "port": "5432",
+            "dialect": "postgres"
         }
     },
     "production": {
         "db": {
-            "username": "",
-            "password": "",
+            "username": "hackmd",
+            "password": "hackmdpass",
             "database": "hackmd",
             "host": "localhost",
             "port": "5432",
