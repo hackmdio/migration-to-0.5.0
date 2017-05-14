@@ -1,0 +1,18 @@
+version: '2'
+services:
+  migrate:
+    image: node:6-alpine
+    command: sh -c "cd /usr/src/app && npm install && node app.js"
+    environment:
+      NODE_ENV: "production"
+      DEBUG: "false"
+    volumes:
+      - ./:/usr/src/app/
+      - ../hackmd/config.json:/usr/src/app/config.json
+    networks:
+      - back-tier
+
+networks:
+  back-tier:
+    external:
+      name: dockerhackmd_back-tier
